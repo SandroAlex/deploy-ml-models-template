@@ -1,0 +1,89 @@
+
+version: '3'
+
+services:
+  rabbitmq-service:
+    image: rabbitmq:3-management
+    networks:
+    - deploy-network
+    ports:
+    - 5672:5672
+    - 5673:5673
+    - 15672:15672
+
+  database-service:
+    image: mongo:latest
+    container_name: "mongo"
+    restart: always
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=password
+    ports:
+    - 27017:27017
+    networks:
+    - deploy-network
+
+  mongo-express:
+    image: mongo-express:latest
+    container_name: "mongo-express"
+    hostname: mongo-express
+    environment:
+      - ME_CONFIG_MONGODB_SERVER=database-service
+      - ME_CONFIG_MONGODB_ADMINUSERNAME=admin
+      - ME_CONFIG_MONGODB_ADMINPASSWORD=password
+      - ME_CONFIG_BASICAUTH_USERNAME=me_user
+      - ME_CONFIG_BASICAUTH_PASSWORD=me_password
+    networks:
+      - deploy-network
+    ports:
+      - "8081:8081"
+    depends_on:
+      - database-service
+      
+  model-service:
+    image: deploy/model
+    build:
+      context: ./model
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./model:/app
+    environment:
+      - RABBITMQ_HOST=rabbitmq-service
+      - DB_HOST=database-service
+      - QUEUE_NAME=ml_queue
+      - HEART_BEAT_TIMEOUT=120
+      - BLOCKED_CONNECTION_TIMEOUT=300
+    networks:
+      - deploy-network
+    depends_on:
+      - rabbitmq-service
+    restart: on-failure
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+
+  web-service:
+    image: deploy/web
+    build: 
+      context: ./web
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./web:/app
+    ports:
+      - 8080:80
+    networks:
+      - deploy-network
+    restart: on-failure
+    depends_on:
+      - rabbitmq-service
+      - database-service
+    environment:
+      - RABBITMQ_HOST=rabbitmq-service
+      - DB_HOST=database-service
+      - QUEUE_NAME=ml_queue
+    links:
+      - rabbitmq-service
+
+networks:
+    deploy-network:

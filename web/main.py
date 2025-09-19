@@ -16,7 +16,7 @@ queueName = os.environ.get("QUEUE_NAME")
 rabbitMQHost = os.environ.get("RABBITMQ_HOST")
 dbHost = os.environ.get("DB_HOST")
 
-
+# Mongo data base.
 myclient = pymongo.MongoClient("mongodb://" + dbHost + ":27017")
 mydb = myclient["mydatabase"]
 mycol = mydb["preddata"]
@@ -38,15 +38,24 @@ async def root():
 async def predict_items(predInput:PredInput):
     
     id = str(uuid.uuid4())
-    mydict = {"id":id,"rateOfInterest":predInput.rateOfInterest, "salesIn1stMonth":predInput.salesInIstMonth, "salesIn2ndMonth":predInput.salesIn2ndMonth}
-    
-    x= mycol.insert(mydict)
-    corr_id = mqClient.send_request(id)
-    print(" [x] Sent %r" % id)
-    return {"result":"success", "tracking_id": id}
 
+    mydict = {
+        "id": id,
+        "rateOfInterest": predInput.rateOfInterest,
+        "salesIn1stMonth": predInput.salesInIstMonth,
+        "salesIn2ndMonth": predInput.salesIn2ndMonth
+    }
+
+    x = mycol.insert_one(mydict)
+    
+    corr_id = mqClient.send_request(id)
+    
+    print(" [x] Sent %r" % id)
+
+    return {"result": "success", "tracking_id": id}
 
 class MQClient(object):
+    
     internal_lock = threading.Lock()
     queue = {}
 
